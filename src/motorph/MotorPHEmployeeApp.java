@@ -9,11 +9,11 @@ import javax.swing.SwingUtilities;
 public class MotorPHEmployeeApp {
     public static void main(String[] args) {
         
-        // This launches your Graphical User Interface safely on the Event Dispatch Thread
+        // This launches the Graphical User Interface safely on the Event Dispatch Thread
         SwingUtilities.invokeLater(new Runnable() {
             @Override
             public void run() {
-                // Instantiates and pops up your new Swing window frame
+                // Instantiates and pops up the new Swing window frame
                 MotorPHPayrollGUI payrollInterface = new MotorPHPayrollGUI();
                 payrollInterface.setVisible(true);
             }
