@@ -42,5 +42,6 @@ public class Attendance {
     public LocalDate getDate() { return date; }
     public LocalTime getTimeIn() { return timeIn; }
     public LocalTime getTimeOut() { return timeOut; }
-}
+
+    }
 
