@@ -6,96 +6,169 @@ package motorph;
 
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
+import javax.swing.table.TableRowSorter;
 import java.awt.*;
 import java.io.IOException;
 import java.util.List;
-import java.io.File;
 
 public class MotorPHPayrollGUI extends JFrame {
 
+    // ==========================================
+    // BUSINESS ENGINE CONSTANTS (Replaces Magic Numbers)
+    // ==========================================
+    private static final double HOURS_PER_DAY = 8.0;
+    private static final double DEFAULT_WORKING_DAYS = 21.75;
+    private static final double FLAT_DEDUCTION_RATE = 0.10; // 10%
+
+    // ==============================
+    // EMPLOYEE MANAGEMENT COMPONENTS
+    // ==============================
     private JTable tblEmployees;
     private DefaultTableModel tableModel;
-    
-    private JTextField regId, regLastName, regFirstName, regBday, regRate;
-    private JTextField regSss, regPhilHealth, regTin, regPagIbig;
-    private JButton btnSaveRecord, btnUpdateRecord, btnDeleteRecord, btnClearForm;
-    
+
+    private JTextField regId;
+    private JTextField regLastName;
+    private JTextField regFirstName;
+    private JTextField regBday;
+    private JTextField regRate;
+    private JTextField regSss;
+    private JTextField regPhilHealth;
+    private JTextField regTin;
+    private JTextField regPagIbig;
+
+    private JButton btnSaveRecord;
+    private JButton btnUpdateRecord;
+    private JButton btnDeleteRecord;
+    private JButton btnClearForm;
+
+    // ==============================
+    // PAYROLL PROCESSING COMPONENTS
+    // ==============================
     private JTextField txtDaysWorkedBatch;
     private JTextArea txtAreaSalaryReport;
     private JButton btnComputeMassSalaries;
 
+    // ==============================
+    // PAYROLL SUMMARY COMPONENTS
+    // ==============================
+    private JTextArea txtAreaPayrollSummary;
+    private JButton btnGenerateSummary;
+
+    // ==============================
+    // CONSTRUCTOR
+    // ==============================
     public MotorPHPayrollGUI() {
-        setTitle("MotorPH Enterprise Management Console Suite");
-        setSize(1000, 700);
+        setTitle("MotorPH Employee Management and Payroll System");
+        setSize(1150, 750);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLocationRelativeTo(null);
 
-        JTabbedPane mainTabs = new JTabbedPane();
-        mainTabs.addTab("Employee Registry Management Ledger (CRUD)", createCrudTabPanel());
-        mainTabs.addTab("Mass Payroll Processing Workspace (Batch Engine)", createSalaryComputationTabPanel());
-        add(mainTabs);
+        JTabbedPane tabs = new JTabbedPane();
+
+        tabs.addTab("Employee Registry Management", createCrudTabPanel());
+        tabs.addTab("Payroll Processing", createSalaryComputationTabPanel());
+        tabs.addTab("Payroll Summary Dashboard", createPayrollSummaryPanel());
+
+        add(tabs);
 
         setupEventHandlers();
         refreshTableData();
+        setSelectionDependentButtonsEnabled(false); // Initially disabled until selected
     }
 
+    // =================================================
+    // EMPLOYEE CRUD TAB
+    // =================================================
     private JPanel createCrudTabPanel() {
         JPanel panel = new JPanel(new BorderLayout(10, 10));
-        panel.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
+        panel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
 
-        String[] columnNames = {"Emp ID", "Last Name", "First Name", "Birthday", "Hourly Rate", "SSS #", "PhilHealth #", "TIN", "Pag-IBIG #"};
-        tableModel = new DefaultTableModel(columnNames, 0) {
-            @Override
-            public boolean isCellEditable(int row, int column) { return false; }
+        String[] columns = {
+            "Employee ID", "Last Name", "First Name", "Birthday", 
+            "Hourly Rate", "SSS", "PhilHealth", "TIN", "Pag-IBIG"
         };
+
+        tableModel = new DefaultTableModel(columns, 0) {
+            @Override
+            public boolean isCellEditable(int row, int column) {
+                return false;
+            }
+            @Override
+            public Class<?> getColumnClass(int columnIndex) {
+                // Allows proper numerical sorting on the Hourly Rate column
+                if (columnIndex == 4) return Double.class;
+                return String.class;
+            }
+        };
+
         tblEmployees = new JTable(tableModel);
         tblEmployees.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        
+        // Bonus Feature: Native Row Sorting by clicking headers
+        TableRowSorter<DefaultTableModel> sorter = new TableRowSorter<>(tableModel);
+        tblEmployees.setRowSorter(sorter);
+        
         panel.add(new JScrollPane(tblEmployees), BorderLayout.CENTER);
 
         JPanel formPanel = new JPanel(new BorderLayout(5, 5));
-        JPanel gridFields = new JPanel(new GridLayout(5, 4, 8, 8));
-        gridFields.setBorder(BorderFactory.createTitledBorder("Active Employee Profile Details Form"));
+        JPanel fields = new JPanel(new GridLayout(9, 2, 8, 8));
+        fields.setBorder(BorderFactory.createTitledBorder("Employee Information"));
 
-        gridFields.add(new JLabel(" Employee ID * :")); regId = new JTextField(); gridFields.add(regId);
-        gridFields.add(new JLabel(" Last Name * :")); regLastName = new JTextField(); gridFields.add(regLastName);
-        gridFields.add(new JLabel(" First Name * :")); regFirstName = new JTextField(); gridFields.add(regFirstName);
-        gridFields.add(new JLabel(" Birthday (YYYY-MM-DD):")); regBday = new JTextField(); gridFields.add(regBday);
-        gridFields.add(new JLabel(" Hourly Rate * (PHP):")); regRate = new JTextField(); gridFields.add(regRate);
-        gridFields.add(new JLabel(" SSS ID Number:")); regSss = new JTextField(); gridFields.add(regSss);
-        gridFields.add(new JLabel(" PhilHealth Number:")); regPhilHealth = new JTextField(); gridFields.add(regPhilHealth);
-        gridFields.add(new JLabel(" Tax Identification Number:")); regTin = new JTextField(); gridFields.add(regTin);
-        gridFields.add(new JLabel(" Pag-IBIG ID Number:")); regPagIbig = new JTextField(); gridFields.add(regPagIbig);
+        regId = new JTextField();
+        regLastName = new JTextField();
+        regFirstName = new JTextField();
+        regBday = new JTextField();
+        regRate = new JTextField();
+        regSss = new JTextField();
+        regPhilHealth = new JTextField();
+        regTin = new JTextField();
+        regPagIbig = new JTextField();
 
-        formPanel.add(gridFields, BorderLayout.CENTER);
+        fields.add(new JLabel("Employee ID:")); fields.add(regId);
+        fields.add(new JLabel("Last Name:")); fields.add(regLastName);
+        fields.add(new JLabel("First Name:")); fields.add(regFirstName);
+        fields.add(new JLabel("Birthday (YYYY-MM-DD):")); fields.add(regBday);
+        fields.add(new JLabel("Hourly Rate (PHP):")); fields.add(regRate);
+        fields.add(new JLabel("SSS Number:")); fields.add(regSss);
+        fields.add(new JLabel("PhilHealth Number:")); fields.add(regPhilHealth);
+        fields.add(new JLabel("TIN:")); fields.add(regTin);
+        fields.add(new JLabel("Pag-IBIG Number:")); fields.add(regPagIbig);
 
-        JPanel stripButtons = new JPanel(new FlowLayout(FlowLayout.CENTER, 20, 10));
-        btnSaveRecord = new JButton("Add Record");
-        btnUpdateRecord = new JButton("Update Selected");
-        btnDeleteRecord = new JButton("Delete Record");
-        btnClearForm = new JButton("Clear Input Form");
+        formPanel.add(fields, BorderLayout.CENTER);
 
-        stripButtons.add(btnSaveRecord);
-        stripButtons.add(btnUpdateRecord);
-        stripButtons.add(btnDeleteRecord);
-        stripButtons.add(btnClearForm);
-        formPanel.add(stripButtons, BorderLayout.SOUTH);
+        JPanel buttons = new JPanel(new FlowLayout());
+        btnSaveRecord = new JButton("Add");
+        btnUpdateRecord = new JButton("Update");
+        btnDeleteRecord = new JButton("Delete");
+        btnClearForm = new JButton("Clear");
 
+        buttons.add(btnSaveRecord);
+        buttons.add(btnUpdateRecord);
+        buttons.add(btnDeleteRecord);
+        buttons.add(btnClearForm);
+
+        formPanel.add(buttons, BorderLayout.SOUTH);
         panel.add(formPanel, BorderLayout.SOUTH);
+
         return panel;
     }
 
+    // =================================================
+    // PAYROLL PROCESSING TAB
+    // =================================================
     private JPanel createSalaryComputationTabPanel() {
         JPanel panel = new JPanel(new BorderLayout(10, 10));
         panel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
 
-        JPanel topControlBar = new JPanel(new FlowLayout(FlowLayout.LEFT, 15, 5));
-        topControlBar.add(new JLabel("Target Execution Period Working Days Baseline: "));
-        txtDaysWorkedBatch = new JTextField("21.75", 6);
-        topControlBar.add(txtDaysWorkedBatch);
-        
-        btnComputeMassSalaries = new JButton("⚡ Run Enterprise Mass Salary Computations Engine");
-        topControlBar.add(btnComputeMassSalaries);
-        panel.add(topControlBar, BorderLayout.NORTH);
+        JPanel controls = new JPanel(new FlowLayout());
+        controls.add(new JLabel("Working Days:"));
+        txtDaysWorkedBatch = new JTextField(String.valueOf(DEFAULT_WORKING_DAYS), 6);
+        controls.add(txtDaysWorkedBatch);
+
+        btnComputeMassSalaries = new JButton("Compute Payroll");
+        controls.add(btnComputeMassSalaries);
+
+        panel.add(controls, BorderLayout.NORTH);
 
         txtAreaSalaryReport = new JTextArea();
         txtAreaSalaryReport.setEditable(false);
@@ -105,193 +178,299 @@ public class MotorPHPayrollGUI extends JFrame {
         return panel;
     }
 
+    // =================================================
+    // PAYROLL SUMMARY TAB
+    // =================================================
+    private JPanel createPayrollSummaryPanel() {
+        JPanel panel = new JPanel(new BorderLayout(10, 10));
+        panel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+
+        btnGenerateSummary = new JButton("Generate Payroll Summary");
+        txtAreaPayrollSummary = new JTextArea();
+        txtAreaPayrollSummary.setEditable(false);
+        txtAreaPayrollSummary.setFont(new Font("Monospaced", Font.PLAIN, 14));
+
+        panel.add(btnGenerateSummary, BorderLayout.NORTH);
+        panel.add(new JScrollPane(txtAreaPayrollSummary), BorderLayout.CENTER);
+
+        return panel;
+    }
+
+    // =================================================
+    // DATA REFRESH WITH TYPE CASTING
+    // =================================================
     private void refreshTableData() {
         try {
             tableModel.setRowCount(0);
-            List<String[]> lines = EmployeeDataHandler.readAllEmployees();
-            for (String[] row : lines) {
-                tableModel.addRow(row);
-            }
-        } catch (IOException ex) {
-            // Trap and display data corruption notices clearly to users on runtime ingress initialization loops
-            JOptionPane.showMessageDialog(this, ex.getMessage(), "Database File Degradation Notice", JOptionPane.WARNING_MESSAGE);
-            
-            // Re-render valid rows that managed to pass filtration checks cleanly
-            try {
-                tableModel.setRowCount(0);
-                File f = new File("employees.txt");
-                if(f.exists()){
-                     // Standard non-blocking catch reload
-                     for(String[] validRow : EmployeeDataHandler.readAllEmployees()){
-                          tableModel.addRow(validRow);
-                     }
+            List<String[]> employees = EmployeeDataHandler.readAllEmployees();
+            for (String[] emp : employees) {
+                // Parse hourly rate explicitly so RowSorter can order it mathematically instead of lexically
+                Object[] rowData = new Object[emp.length];
+                System.arraycopy(emp, 0, rowData, 0, emp.length);
+                try {
+                    rowData[4] = Double.parseDouble(emp[4]);
+                } catch (NumberFormatException e) {
+                    rowData[4] = 0.0; 
                 }
-            } catch(Exception structuralIgnored){}
+                tableModel.addRow(rowData);
+            }
+        } catch (IOException e) {
+            JOptionPane.showMessageDialog(this, "Database Error:\n" + e.getMessage(), "Database Error", JOptionPane.ERROR_MESSAGE);
         }
     }
 
+    // =================================================
+    // EVENT HANDLERS & STATE CONTROL
+    // =================================================
     private void setupEventHandlers() {
-        
+        // Table Selection Updates Form & Toggles State Buttons
         tblEmployees.getSelectionModel().addListSelectionListener(e -> {
             if (!e.getValueIsAdjusting() && tblEmployees.getSelectedRow() != -1) {
-                int row = tblEmployees.getSelectedRow();
-                regId.setText((String) tableModel.getValueAt(row, 0));
-                regId.setEditable(false); 
-                regLastName.setText((String) tableModel.getValueAt(row, 1));
-                regFirstName.setText((String) tableModel.getValueAt(row, 2));
-                regBday.setText((String) tableModel.getValueAt(row, 3));
-                regRate.setText((String) tableModel.getValueAt(row, 4));
-                regSss.setText((String) tableModel.getValueAt(row, 5));
-                regPhilHealth.setText((String) tableModel.getValueAt(row, 6));
-                regTin.setText((String) tableModel.getValueAt(row, 7));
-                regPagIbig.setText((String) tableModel.getValueAt(row, 8));
+                int selectedRow = tblEmployees.getSelectedRow();
+                // Map view index to model index in case the view is currently sorted
+                int modelRow = tblEmployees.convertRowIndexToModel(selectedRow);
+
+                regId.setText(tableModel.getValueAt(modelRow, 0).toString());
+                regId.setEditable(false);
+                regLastName.setText(tableModel.getValueAt(modelRow, 1).toString());
+                regFirstName.setText(tableModel.getValueAt(modelRow, 2).toString());
+                regBday.setText(tableModel.getValueAt(modelRow, 3).toString());
+                regRate.setText(tableModel.getValueAt(modelRow, 4).toString());
+                regSss.setText(tableModel.getValueAt(modelRow, 5).toString());
+                regPhilHealth.setText(tableModel.getValueAt(modelRow, 6).toString());
+                regTin.setText(tableModel.getValueAt(modelRow, 7).toString());
+                regPagIbig.setText(tableModel.getValueAt(modelRow, 8).toString());
+                
+                setSelectionDependentButtonsEnabled(true);
             }
         });
 
+        // Add Employee Command
         btnSaveRecord.addActionListener(e -> {
             try {
+                validateFormInputs();
                 String id = regId.getText().trim();
-                String last = regLastName.getText().trim();
-                String first = regFirstName.getText().trim();
-                String rateRaw = regRate.getText().trim();
-
-                if (id.isEmpty() || last.isEmpty() || first.isEmpty() || rateRaw.isEmpty()) {
-                    throw new IllegalArgumentException("Fields with (*) are required parameters.");
-                }
-                
-                int parsedId = Integer.parseInt(id);
-                if (parsedId <= 0) throw new IllegalArgumentException("Employee ID must be a positive integer.");
                 if (EmployeeDataHandler.isEmployeeIdDuplicate(id)) {
-                    throw new IllegalArgumentException("Constraint Conflict: Employee ID already exists.");
+                    throw new Exception("Validation Failure: Employee ID '" + id + "' already exists in systems.");
                 }
 
-                Double.parseDouble(rateRaw); 
-
-                String[] rowFields = { id, last, first, regBday.getText().trim().isEmpty() ? "N/A" : regBday.getText().trim(), rateRaw, regSss.getText().trim().isEmpty() ? "N/A" : regSss.getText().trim(), regPhilHealth.getText().trim().isEmpty() ? "N/A" : regPhilHealth.getText().trim(), regTin.getText().trim().isEmpty() ? "N/A" : regTin.getText().trim(), regPagIbig.getText().trim().isEmpty() ? "N/A" : regPagIbig.getText().trim() };
-                EmployeeDataHandler.saveValidatedEmployee(rowFields);
-                
-                JOptionPane.showMessageDialog(this, "Employee Added and Saved Successfully!", "Success", JOptionPane.INFORMATION_MESSAGE);
+                String[] employee = getFormData();
+                EmployeeDataHandler.saveValidatedEmployee(employee);
+                JOptionPane.showMessageDialog(this, "Employee successfully committed to database.", "Success", JOptionPane.INFORMATION_MESSAGE);
                 clearFormFields();
                 refreshTableData();
             } catch (Exception ex) {
-                JOptionPane.showMessageDialog(this, ex.getMessage(), "Input Format Validation Notice", JOptionPane.WARNING_MESSAGE);
+                JOptionPane.showMessageDialog(this, ex.getMessage(), "Registration Error", JOptionPane.WARNING_MESSAGE);
             }
         });
 
+        // Update Employee Command
         btnUpdateRecord.addActionListener(e -> {
             try {
-                String targetId = regId.getText().trim();
-                if (targetId.isEmpty()) throw new IllegalArgumentException("Select a row line item record from the table list view first.");
-
-                String rateRaw = regRate.getText().trim();
-                Double.parseDouble(rateRaw); 
-
-                String[] updatedFields = { targetId, regLastName.getText().trim(), regFirstName.getText().trim(), regBday.getText().trim(), rateRaw, regSss.getText().trim(), regPhilHealth.getText().trim(), regTin.getText().trim(), regPagIbig.getText().trim() };
+                String id = regId.getText().trim();
+                if (id.isEmpty()) {
+                    throw new Exception("Operational Error: Action aborted. Please pick an employee record first.");
+                }
                 
-                boolean success = EmployeeDataHandler.updateEmployeeRecord(targetId, updatedFields);
-                if (success) {
-                    JOptionPane.showMessageDialog(this, "Employee Profile Updated Successfully!", "Success", JOptionPane.INFORMATION_MESSAGE);
-                    clearFormFields();
+                validateFormInputs();
+
+                int selection = JOptionPane.showConfirmDialog(this, 
+                        "Are you sure you want to update records for Employee ID: " + id + "?", 
+                        "Confirm Modifications", JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE);
+                
+                if (selection == JOptionPane.YES_OPTION) {
+                    String[] updated = getFormData();
+                    EmployeeDataHandler.updateEmployeeRecord(id, updated);
+                    JOptionPane.showMessageDialog(this, "Record successfully updated.", "Success", JOptionPane.INFORMATION_MESSAGE);
                     refreshTableData();
-                } else {
-                    JOptionPane.showMessageDialog(this, "Target Record not found on database storage index.", "Notice", JOptionPane.WARNING_MESSAGE);
+                    clearFormFields();
                 }
             } catch (Exception ex) {
-                JOptionPane.showMessageDialog(this, ex.getMessage(), "Validation Notice", JOptionPane.WARNING_MESSAGE);
+                JOptionPane.showMessageDialog(this, ex.getMessage(), "Update Error", JOptionPane.WARNING_MESSAGE);
             }
         });
 
+        // Delete Employee Command
         btnDeleteRecord.addActionListener(e -> {
             try {
-                String targetId = regId.getText().trim();
-                if (targetId.isEmpty()) throw new IllegalArgumentException("Please click an active row line from the grid dashboard to process deletion.");
+                String id = regId.getText().trim();
+                if (id.isEmpty()) {
+                    throw new Exception("Operational Error: Action aborted. Please pick an employee record first.");
+                }
+                
+                int choice = JOptionPane.showConfirmDialog(this, 
+                        "CRITICAL ACTION: Permanently wipe record for Employee " + id + "?", 
+                        "Confirm Data Destruction", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
 
-                int confirm = JOptionPane.showConfirmDialog(this, "Are you sure you want to permanently delete Employee Profile " + targetId + "?", "Verify Action", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
-                if (confirm == JOptionPane.YES_OPTION) {
-                    boolean success = EmployeeDataHandler.deleteEmployeeRecord(targetId);
-                    if (success) {
-                        JOptionPane.showMessageDialog(this, "Record successfully purged from registry.");
-                        clearFormFields();
-                        refreshTableData();
-                    } else {
-                        JOptionPane.showMessageDialog(this, "Deletion failed. Target ID was missing from database lists.");
-                    }
+                if (choice == JOptionPane.YES_OPTION) {
+                    EmployeeDataHandler.deleteEmployeeRecord(id);
+                    JOptionPane.showMessageDialog(this, "Employee successfully scrubbed from persistent registry.");
+                    refreshTableData();
+                    clearFormFields();
                 }
             } catch (Exception ex) {
-                JOptionPane.showMessageDialog(this, ex.getMessage(), "Error Block", JOptionPane.ERROR_MESSAGE);
+                JOptionPane.showMessageDialog(this, ex.getMessage(), "Deletion Error", JOptionPane.ERROR_MESSAGE);
             }
         });
 
         btnClearForm.addActionListener(e -> clearFormFields());
+        btnGenerateSummary.addActionListener(e -> generatePayrollSummary());
+        btnComputeMassSalaries.addActionListener(e -> computePayroll());
+    }
 
-        btnComputeMassSalaries.addActionListener(e -> {
-            try {
-                String rawDays = txtDaysWorkedBatch.getText().trim();
-                if (rawDays.isEmpty()) throw new IllegalArgumentException("Input Error: Days worked threshold entry bounds cannot be empty.");
-                
-                double validatedDaysWorked = Double.parseDouble(rawDays);
-                if (validatedDaysWorked <= 0 || validatedDaysWorked > 31) throw new IllegalArgumentException("Operational Bounds Error: Period working metrics must run between 1 and 31 days.");
+    // =================================================
+    // COMPREHENSIVE INPUT VALIDATION ENGINE
+    // =================================================
+    private void validateFormInputs() throws Exception {
+        if (regId.getText().trim().isEmpty()) throw new Exception("Validation Error: Employee ID field is required.");
+        if (regLastName.getText().trim().isEmpty()) throw new Exception("Validation Error: Last Name field is required.");
+        if (regFirstName.getText().trim().isEmpty()) throw new Exception("Validation Error: First Name field is required.");
+        
+        // Date regex format verification (YYYY-MM-DD)
+        String dateText = regBday.getText().trim();
+        if (dateText.isEmpty()) {
+            throw new Exception("Validation Error: Birthday field is required.");
+        } else if (!dateText.matches("\\d{4}-\\d{2}-\\d{2}")) {
+            throw new Exception("Validation Error: Invalid Birthday Format. Expected structure: YYYY-MM-DD");
+        }
 
-                // Reload tax parameter properties from file right before calculations trigger
-                SalaryComputationModule.loadSystemTaxConfigurations();
+        // Numerical format evaluation
+        String rateText = regRate.getText().trim();
+        if (rateText.isEmpty()) {
+            throw new Exception("Validation Error: Hourly Rate is required.");
+        }
+        try {
+            double parsedRate = Double.parseDouble(rateText);
+            if (parsedRate < 0) throw new Exception("Validation Error: Base hourly compensation metrics cannot be negative.");
+        } catch (NumberFormatException e) {
+            throw new Exception("Parsing Error: Hourly Rate evaluation failed. Entered sequence must be a numeric floating point value.");
+        }
 
-                List<String[]> activeRecords = EmployeeDataHandler.readAllEmployees();
-                int size = activeRecords.size();
-                if (size == 0) {
-                    txtAreaSalaryReport.setText("DATABASE LOG: No profiles detected inside tracking arrays.");
-                    return;
-                }
+        // Government IDs missing criteria evaluations
+        if (regSss.getText().trim().isEmpty()) throw new Exception("Validation Error: SSS Identifier is required.");
+        if (regPhilHealth.getText().trim().isEmpty()) throw new Exception("Validation Error: PhilHealth Identifier is required.");
+        if (regTin.getText().trim().isEmpty()) throw new Exception("Validation Error: TIN Identifier is required.");
+        if (regPagIbig.getText().trim().isEmpty()) throw new Exception("Validation Error: Pag-IBIG Identifier is required.");
+    }
 
-                double[] ratesArray = new double[size];
-                double[] daysWorkedArray = new double[size];
-                String[] namesArray = new String[size];
-                String[] idsArray = new String[size];
+    private String[] getFormData() {
+        return new String[]{
+            regId.getText().trim(), regLastName.getText().trim(), regFirstName.getText().trim(),
+            regBday.getText().trim(), regRate.getText().trim(), regSss.getText().trim(),
+            regPhilHealth.getText().trim(), regTin.getText().trim(), regPagIbig.getText().trim()
+        };
+    }
 
-                for (int i = 0; i < size; i++) {
-                    String[] row = activeRecords.get(i);
-                    idsArray[i] = row[0];
-                    namesArray[i] = row[2] + " " + row[1]; 
-                    daysWorkedArray[i] = validatedDaysWorked;
-                    try {
-                        ratesArray[i] = Double.parseDouble(row[4].trim());
-                    } catch (NumberFormatException nfe) {
-                        ratesArray[i] = 0.0; 
-                    }
-                }
+    private void setSelectionDependentButtonsEnabled(boolean enabled) {
+        btnUpdateRecord.setEnabled(enabled);
+        btnDeleteRecord.setEnabled(enabled);
+    }
 
-                double[] grossPays = SalaryComputationModule.computeGrossPay(ratesArray, daysWorkedArray);
-                double[] sss = SalaryComputationModule.computeSSS(grossPays);
-                double[] ph = SalaryComputationModule.computePhilHealth(grossPays);
-                double[] pb = SalaryComputationModule.computePagIBIG(grossPays);
-                double[] statDeductions = SalaryComputationModule.computeDeductions(sss, ph, pb);
-                double[] tax = SalaryComputationModule.computeWithholdingTax(grossPays, statDeductions);
-                double[] netPays = SalaryComputationModule.computeNetPay(grossPays, statDeductions, tax);
-
-                StringBuilder report = new StringBuilder();
-                report.append("========================================================================================================================\n");
-                report.append("                                           MOTORPH SYSTEM ENTERPRISE MANAGEMENT MASS PAYROLL REPORT                     \n");
-                report.append("========================================================================================================================\n");
-                report.append(String.format("%-6s | %-24s | %-12s | %-12s | %-11s | %-11s | %-11s | %-12s\n", "ID", "EMPLOYEE FULL NAME", "RATE/DAY", "GROWS PAY", "SSS DED.", "PHILHEALTH", "WITH. TAX", "NET PAYOUT"));
-                report.append("------------------------------------------------------------------------------------------------------------------------\n");
-
-                for (int i = 0; i < size; i++) {
-                    report.append(String.format("%-6s | %-24s | PHP %-8.2f | PHP %-8.2f | PHP %-7.2f | PHP %-7.2f | PHP %-7.2f | PHP %-8.2f\n",
-                            idsArray[i], namesArray[i], ratesArray[i], grossPays[i], sss[i], ph[i], tax[i], netPays[i]));
-                }
-                report.append("========================================================================================================================\n");
-
-                txtAreaSalaryReport.setText(report.toString());
-                JOptionPane.showMessageDialog(this, "Batch Calculations Engine Task Completed Successfully!", "Success Summary Run", JOptionPane.INFORMATION_MESSAGE);
-
-            } catch (Exception ex) {
-                JOptionPane.showMessageDialog(this, "Batch Core Exception: " + ex.getMessage(), "Execution Failure", JOptionPane.WARNING_MESSAGE);
+    // =================================================
+    // SUMMARY DASHBOARD ENGINE (Enriched Metrics)
+    // =================================================
+    private void generatePayrollSummary() {
+        try {
+            List<String[]> employees = EmployeeDataHandler.readAllEmployees();
+            if (employees.isEmpty()) {
+                txtAreaPayrollSummary.setText("No active system employee entities found. Operation failed.");
+                return;
             }
-        });
+
+            double totalGross = 0;
+            double totalDeduction = 0;
+            double totalNet = 0;
+            double highestNet = Double.MIN_VALUE;
+            double lowestNet = Double.MAX_VALUE;
+
+            for (String[] emp : employees) {
+                double hourlyRate = Double.parseDouble(emp[4]);
+                double gross = hourlyRate * HOURS_PER_DAY * DEFAULT_WORKING_DAYS; 
+                double deduction = gross * FLAT_DEDUCTION_RATE; 
+                double net = gross - deduction;
+
+                totalGross += gross;
+                totalDeduction += deduction;
+                totalNet += net;
+
+                if (net > highestNet) highestNet = net;
+                if (net < lowestNet) lowestNet = net;
+            }
+
+            double averageNet = totalNet / employees.size();
+            double averageGross = totalGross / employees.size();
+
+            txtAreaPayrollSummary.setText(
+                "========================================================\n" +
+                "               MOTORPH CORP. PAYROLL METRICS            \n" +
+                "========================================================\n\n" +
+                String.format(" Total Registered Active Personnel : %d Headcount\n", employees.size()) +
+                String.format(" Total Accrued Operational Expense: PHP %,.2f\n", totalGross) +
+                String.format(" Total Tax/Benefit Outlay Deductions: PHP %,.2f\n", totalDeduction) +
+                "--------------------------------------------------------\n" +
+                String.format(" Average Statistical Gross Compensation: PHP %,.2f\n", averageGross) +
+                String.format(" Average Personnel Take-Home Yield (Net): PHP %,.2f\n", averageNet) +
+                String.format(" Top Tier Compensated Net Benchmark     : PHP %,.2f\n", highestNet) +
+                String.format(" Minimum Threshold Net Compensation     : PHP %,.2f\n", lowestNet) +
+                "========================================================"
+            );
+
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(this, "Calculation Engine Failure:\nVerify standard structure fields across employee registry strings.", "Analysis Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    // =================================================
+    // PAYROLL BREAKDOWN ENGINE (Enhanced Layout Structure)
+    // =================================================
+    private void computePayroll() {
+        try {
+            String batchDaysText = txtDaysWorkedBatch.getText().trim();
+            if(batchDaysText.isEmpty()) throw new Exception("Days Worked variable constraint absent.");
+            
+            double daysWorked;
+            try {
+                daysWorked = Double.parseDouble(batchDaysText);
+                if (daysWorked < 0) throw new Exception();
+            } catch (Exception ex) {
+                throw new Exception("Input constraint violation: Working periods must be zero or positive integer-variant numerical formats.");
+            }
+
+            List<String[]> employees = EmployeeDataHandler.readAllEmployees();
+            
+            StringBuilder report = new StringBuilder();
+            report.append(String.format("%-10s %-25s %-12s %-12s %-15s %-15s %-15s\n", 
+                    "ID", "Employee Name", "Days Worked", "Hourly Rate", "Gross Pay", "Deductions", "Net Pay"));
+            report.append("-----------------------------------------------------------------------------------------------------------------\n");
+            
+            for (String[] emp : employees) {
+                String id = emp[0];
+                String fullName = emp[1] + ", " + emp[2];
+                double hourlyRate = Double.parseDouble(emp[4]);
+                
+                double gross = hourlyRate * HOURS_PER_DAY * daysWorked;
+                double deduction = gross * FLAT_DEDUCTION_RATE;
+                double net = gross - deduction;
+                
+                report.append(String.format("%-10s %-25s %-12.2f %-12.2f %-15s %-15s %-15s\n", 
+                        id, 
+                        fullName, 
+                        daysWorked,
+                        hourlyRate,
+                        String.format("₱%,.2f", gross), 
+                        String.format("₱%,.2f", deduction), 
+                        String.format("₱%,.2f", net)));
+            }
+            
+            txtAreaSalaryReport.setText(report.toString());
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(this, e.getMessage(), "Execution Engine Error", JOptionPane.WARNING_MESSAGE);
+        }
     }
 
     private void clearFormFields() {
         regId.setText("");
-        regId.setEditable(true); 
+        regId.setEditable(true);
         regLastName.setText("");
         regFirstName.setText("");
         regBday.setText("");
@@ -301,9 +480,12 @@ public class MotorPHPayrollGUI extends JFrame {
         regTin.setText("");
         regPagIbig.setText("");
         tblEmployees.clearSelection();
+        setSelectionDependentButtonsEnabled(false);
     }
 
     public static void main(String[] args) {
-        SwingUtilities.invokeLater(() -> new MotorPHPayrollGUI().setVisible(true));
+        SwingUtilities.invokeLater(() -> {
+            new MotorPHPayrollGUI().setVisible(true);
+        });
     }
 }

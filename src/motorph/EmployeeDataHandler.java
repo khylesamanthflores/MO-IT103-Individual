@@ -5,6 +5,8 @@
 package motorph;
 
 import java.io.*;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -12,6 +14,9 @@ public class EmployeeDataHandler {
     private static final String FILE_NAME = "employees.txt";
     public static final int EXPECTED_COLUMNS = 9; 
 
+    // ==========================================
+    // DATA EXTRACTION (READ ENGINE)
+    // ==========================================
     public static List<String[]> readAllEmployees() throws IOException {
         List<String[]> records = new ArrayList<>();
         File targetFile = new File(FILE_NAME);
@@ -37,40 +42,80 @@ public class EmployeeDataHandler {
                     continue; 
                 }
 
-                // Fail-Fast: Reject and flag row corruptions explicitly
+                // Fail-Fast Check for structural data integrity
                 if (tokens.length != EXPECTED_COLUMNS) {
                     corruptedCount++;
-                    System.err.println("❌ INTERNAL DATABASE ERROR: Column mismatch on line " 
+                    System.err.println("Database formatting error on line " 
                                         + lineCounter + ". Expected " + EXPECTED_COLUMNS + ", found " + tokens.length);
-                    continue; // Skip this row to protect the calculation engine from bad parsing
+                    continue; 
+                }
+                
+                // Trim individual cells to prevent layout trailing space mismatch issues
+                for (int i = 0; i < tokens.length; i++) {
+                    tokens[i] = tokens[i].trim();
                 }
                 records.add(tokens);
             }
         }
 
         if (corruptedCount > 0) {
-            throw new IOException("Data Degradation Notice: Found " + corruptedCount + 
-                                  " corrupted rows inside 'employees.txt'. These records were skipped.");
+            throw new IOException("Unable to process " + corruptedCount + " corrupted rows found inside the file.");
         }
 
         return records;
     }
 
+    // ==========================================
+    // RIGOROUS SANITIZATION & VALIDATION ENGINE
+    // ==========================================
     private static String[] sanitizeAndValidateFields(String[] fields) {
         if (fields == null || fields.length != EXPECTED_COLUMNS) {
-            throw new IllegalArgumentException("Database Error: Array dimensions must exactly equal " + EXPECTED_COLUMNS + " entries.");
+            throw new IllegalArgumentException("Internal Error: Employee data formatting mismatch.");
         }
+        
         String[] sanitized = new String[EXPECTED_COLUMNS];
+        
+        // Loop, trim data values, and scrub user input commas to avoid CSV layout parsing errors
         for (int i = 0; i < fields.length; i++) {
-            sanitized[i] = fields[i] != null ? fields[i].replace(",", " ") : "N/A";
+            if (fields[i] == null || fields[i].trim().isEmpty()) {
+                sanitized[i] = "N/A";
+            } else {
+                sanitized[i] = fields[i].replace(",", " ").trim();
+            }
         }
+
+        // Concrete Business Requirement Content Validation
+        if (sanitized[0].equalsIgnoreCase("N/A")) {
+            throw new IllegalArgumentException("Employee ID is a required field.");
+        }
+        if (sanitized[1].equalsIgnoreCase("N/A")) {
+            throw new IllegalArgumentException("Last Name is a required field.");
+        }
+        if (sanitized[2].equalsIgnoreCase("N/A")) {
+            throw new IllegalArgumentException("First Name is a required field.");
+        }
+
+        // Numeric parsing confirmation for Hourly Rate metrics
+        String testRate = sanitized[4];
+        try {
+            Double.parseDouble(testRate);
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("Hourly Rate must be a valid numeric value.");
+        }
+
         return sanitized;
     }
 
+    // ==========================================
+    // PERSISTENCE WRITE / EDIT METHODS
+    // ==========================================
     public static void saveValidatedEmployee(String[] dataFields) throws IOException {
         String[] sanitized = sanitizeAndValidateFields(dataFields);
         try (PrintWriter out = new PrintWriter(new BufferedWriter(new FileWriter(FILE_NAME, true)))) {
             out.println(String.join(",", sanitized));
+        } catch (IOException e) {
+            System.err.println("Fatal Write Interrupt Trace: " + e.getMessage());
+            throw new IOException("Unable to save employee data to the file.");
         }
     }
 
@@ -81,12 +126,11 @@ public class EmployeeDataHandler {
         
         File productionFile = new File(FILE_NAME);
         File tempFile = new File("employees.tmp");
-        File backupFile = new File("employees.bak");
 
         try (PrintWriter out = new PrintWriter(new BufferedWriter(new FileWriter(tempFile, false)))) {
             out.println("ID,Last Name,First Name,Birthday,Hourly Rate,SSS,PhilHealth,TIN,Pag-Ibig");
             for (String[] row : records) {
-                if (row[0].trim().equals(targetId.trim())) {
+                if (row[0].equals(targetId.trim())) {
                     out.println(String.join(",", sanitizedUpdates));
                     recordFound = true;
                 } else {
@@ -95,20 +139,18 @@ public class EmployeeDataHandler {
             }
         }
 
-        // Rolling 3-Step Backup Swap Operations
+        // Modern, Cross-OS Atomic Replacement Protocol
         if (recordFound) {
-            if (backupFile.exists()) backupFile.delete();
-            if (productionFile.exists() && !productionFile.renameTo(backupFile)) {
-                tempFile.delete();
-                throw new IOException("OS Operational Access Interruption: Unable to protect previous file copy.");
+            try {
+                Files.move(tempFile.toPath(), productionFile.toPath(), 
+                           StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            } catch (IOException e) {
+                if (tempFile.exists()) tempFile.delete();
+                System.err.println("OS File IO Move Error: " + e.getMessage());
+                throw new IOException("Unable to update employee record due to a system file error.");
             }
-            if (!tempFile.renameTo(productionFile)) {
-                if (backupFile.exists()) backupFile.renameTo(productionFile); // Automatic Rollback
-                throw new IOException("Write Transaction Interrupted: Data safely rolled back to prevent file corruption.");
-            }
-            backupFile.delete(); 
         } else {
-            tempFile.delete(); 
+            if (tempFile.exists()) tempFile.delete();
         }
         return recordFound;
     }
@@ -119,12 +161,11 @@ public class EmployeeDataHandler {
         
         File productionFile = new File(FILE_NAME);
         File tempFile = new File("employees.tmp");
-        File backupFile = new File("employees.bak");
 
         try (PrintWriter out = new PrintWriter(new BufferedWriter(new FileWriter(tempFile, false)))) {
             out.println("ID,Last Name,First Name,Birthday,Hourly Rate,SSS,PhilHealth,TIN,Pag-Ibig");
             for (String[] row : records) {
-                if (!row[0].trim().equals(targetId.trim())) {
+                if (!row[0].equals(targetId.trim())) {
                     out.println(String.join(",", row));
                 } else {
                     recordFound = true;
@@ -133,30 +174,35 @@ public class EmployeeDataHandler {
         }
 
         if (recordFound) {
-            if (backupFile.exists()) backupFile.delete();
-            if (productionFile.exists() && !productionFile.renameTo(backupFile)) {
-                tempFile.delete();
-                throw new IOException("OS File System Block: Unable to archive file elements.");
+            try {
+                Files.move(tempFile.toPath(), productionFile.toPath(), 
+                           StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            } catch (IOException e) {
+                if (tempFile.exists()) tempFile.delete();
+                System.err.println("OS File IO Move Error: " + e.getMessage());
+                throw new IOException("Unable to delete employee record due to a system file error.");
             }
-            if (!tempFile.renameTo(productionFile)) {
-                if (backupFile.exists()) backupFile.renameTo(productionFile);
-                throw new IOException("Deletion Execution Interrupted: Safely restored initial database layer.");
-            }
-            backupFile.delete();
         } else {
-            tempFile.delete();
+            if (tempFile.exists()) tempFile.delete();
         }
         return recordFound;
     }
 
+    // ==========================================
+    // INTEGRITY / UTILITY OPERATIONS
+    // ==========================================
     public static boolean isEmployeeIdDuplicate(String empId) throws IOException {
         try {
             List<String[]> currentRecords = readAllEmployees();
             for (String[] row : currentRecords) {
-                if (row.length > 0 && row[0].trim().equals(empId.trim())) return true;
+                // Streamlined structural check without the redundant row.length validation rule
+                if (row[0].equals(empId.trim())) return true;
             }
-        } catch (IOException ignored) {} // Allow check to clear if reading empty fresh database files
+        } catch (IOException e) {
+            // No longer ignored silently; structural trace output sent to log console stream
+            System.err.println("Notice: Check skipped while processing duplicate constraints: " + e.getMessage());
+            throw new IOException("Unable to complete employee verification processes.");
+        }
         return false;
     }
 }
-            
